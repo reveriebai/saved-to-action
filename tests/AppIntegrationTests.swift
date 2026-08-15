@@ -1,0 +1,89 @@
+import AppKit
+import Darwin
+import Foundation
+
+private func require(_ condition: @autoclosure () -> Bool, _ message: String) {
+    if !condition() {
+        FileHandle.standardError.write(Data("FAIL: \(message)\n".utf8))
+        exit(1)
+    }
+}
+
+private func writeJSON(_ value: Any, to url: URL) throws {
+    try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    let data = try JSONSerialization.data(withJSONObject: value, options: [.prettyPrinted, .sortedKeys])
+    try data.write(to: url, options: .atomic)
+}
+
+@main
+@MainActor
+struct AppIntegrationTests {
+    static func main() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent("saved-to-action-app-tests-\(UUID().uuidString)")
+        defer { try? fm.removeItem(at: root) }
+
+        let pointerURL = root.appendingPathComponent("AppConfig.json")
+        let suite = "io.github.saved-to-action.tests.\(UUID().uuidString)"
+        setenv("SAVED_TO_ACTION_APP_CONFIG", pointerURL.path, 1)
+        setenv("SAVED_TO_ACTION_DEFAULTS_SUITE", suite, 1)
+        defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
+
+        var loaded = SharedActionStore.loadActions()
+        require(!loaded.configured && loaded.actions.isEmpty, "missing config should show a safe empty state")
+
+        try fm.createDirectory(at: root, withIntermediateDirectories: true)
+        try Data("{".utf8).write(to: pointerURL)
+        loaded = SharedActionStore.loadActions()
+        require(!loaded.configured && loaded.message.contains("损坏"), "damaged app config should degrade")
+
+        let source = root.appendingPathComponent("notes")
+        let workspace = root.appendingPathComponent("workspace")
+        let configURL = workspace.appendingPathComponent("saved-to-action.json")
+        let dataURL = workspace.appendingPathComponent("Data/actions.json")
+        try fm.createDirectory(at: source, withIntermediateDirectories: true)
+        try Data("# 示例\n".utf8).write(to: source.appendingPathComponent("example.md"))
+        try writeJSON(["version": 1, "workspaceConfigPath": configURL.path], to: pointerURL)
+        try writeJSON([
+            "version": 1,
+            "sources": [["name": "示例", "path": source.path]],
+            "dataPath": "Data/actions.json",
+        ], to: configURL)
+        try writeJSON(["version": 1, "updatedAt": "2026-01-01", "actions": []], to: dataURL)
+        loaded = SharedActionStore.loadActions()
+        require(loaded.configured && loaded.actions.isEmpty && loaded.message.contains("还没有行动卡"), "valid empty workspace should render empty state")
+
+        try Data("not-json".utf8).write(to: dataURL, options: .atomic)
+        loaded = SharedActionStore.loadActions()
+        require(!loaded.configured && loaded.message.contains("损坏"), "damaged action JSON should degrade")
+
+        func action(_ id: String, _ path: String) -> [String: Any] {
+            [
+                "id": id, "sourceId": "note:1", "sourceName": "示例", "relativePath": path,
+                "collectionTitle": "示例", "category": "待分类", "intent": "想验证方法。",
+                "task": "打开示例，写下一句话。", "detail": NSNull(), "savedAt": "2026-01-01",
+                "sourceType": "Markdown 笔记",
+            ]
+        }
+
+        try writeJSON(["version": 1, "updatedAt": "2026-01-01", "actions": [action("a1", "../outside.md")]], to: dataURL)
+        loaded = SharedActionStore.loadActions()
+        require(loaded.configured && loaded.actions.count == 1 && loaded.actions[0].sourceURL == nil, "source traversal must disable open-original")
+
+        try writeJSON(["version": 1, "updatedAt": "2026-01-01", "actions": [action("a1", "example.md"), action("a2", "example.md")]], to: dataURL)
+        loaded = SharedActionStore.loadActions()
+        require(loaded.actions.count == 2 && loaded.actions.allSatisfy { $0.sourceURL != nil }, "incremental refresh should load new actions")
+
+        var state = BoardState(currentAction: "a1")
+        state.toggleTracked("a1")
+        require(state.tracked == ["a1"], "tracking should toggle on")
+        state.complete("a1")
+        require(state.done == ["a1"] && state.tracked.isEmpty && state.burned.isEmpty, "complete must not leak into other states")
+        state.burn("a1")
+        require(state.burned == ["a1"] && state.done.isEmpty && state.tracked.isEmpty, "burn must be mutually exclusive")
+
+        SharedActionStore.saveState(state)
+        require(SharedActionStore.loadState() == state, "state should survive a UserDefaults round trip")
+        print("App integration tests passed")
+    }
+}

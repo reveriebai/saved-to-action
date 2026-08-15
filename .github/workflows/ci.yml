@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Python tests
+        run: python3 -m unittest discover -s tests -v
+      - name: Skill structure
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("skill/saved-to-action/SKILL.md")
+          text = path.read_text(encoding="utf-8")
+          assert text.startswith("---\nname: saved-to-action\ndescription:")
+          assert "[TODO" not in text
+          assert Path("skill/saved-to-action/agents/openai.yaml").is_file()
+          PY
+      - name: Privacy scan
+        run: python3 skill/saved-to-action/scripts/privacy_scan.py .
+      - name: Build macOS app
+        run: |
+          fixture="$RUNNER_TEMP/notes"
+          workspace="$RUNNER_TEMP/workspace"
+          mkdir -p "$fixture"
+          printf '# 示例\n' > "$fixture/example.md"
+          python3 skill/saved-to-action/scripts/saved_to_action.py init \
+            --workspace "$workspace" --source "示例=$fixture" --mode future
+          chmod +x skill/saved-to-action/scripts/build_app.sh
+          skill/saved-to-action/scripts/build_app.sh --workspace "$workspace"
+          codesign --verify --deep --strict "$workspace/dist/Saved to Action.app"
+      - name: App integration tests
+        run: |
+          xcrun swiftc \
+            -module-cache-path "$RUNNER_TEMP/swift-module-cache" \
+            -Xcc "-fmodules-cache-path=$RUNNER_TEMP/clang-module-cache" \
+            skill/saved-to-action/assets/macos-app/Sources/AppModels.swift \
+            skill/saved-to-action/assets/macos-app/Sources/SharedActionStore.swift \
+            tests/AppIntegrationTests.swift \
+            -o "$RUNNER_TEMP/app-integration-tests"
+          "$RUNNER_TEMP/app-integration-tests"
