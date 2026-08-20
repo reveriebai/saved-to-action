@@ -1,6 +1,6 @@
 ---
 name: saved-to-action
-description: Turn local Markdown folders into a private macOS action board with incremental action extraction, a daily old-save revisit, an optional WidgetKit component, atomic local JSON updates, and scheduled runs. Use when the user explicitly invokes $saved-to-action to initialize, sync, revisit, validate, build, repair, add a widget, or schedule a Saved to Action workspace. Do not use implicitly for ordinary Markdown reading, task advice, or note editing.
+description: Turn one or more local Markdown folders into a private macOS action board by inspecting notes read-only, extracting 1–2 concrete next actions per new note, validating and atomically updating local JSON, building the Saved to Action desktop app, and optionally configuring a scheduled incremental run. Use when the user explicitly invokes $saved-to-action to initialize, sync, validate, build, repair, or schedule a Saved to Action workspace. Do not use implicitly for ordinary Markdown reading, task advice, or note editing.
 ---
 
 # Saved to Action
@@ -11,9 +11,7 @@ description: Turn local Markdown folders into a private macOS action board with 
 
 - 用户第一次使用或更换来源：执行“初始化”。
 - 用户要求处理新增笔记：执行“增量同步”。
-- 用户要求更新今日回看：执行“旧收藏回看”。
 - 用户要求安装、重建或更新看板：执行“构建 App”。
-- 用户要求桌面小组件：执行“准备 WidgetKit 组件”，不要假设已有开发者签名。
 - 用户明确要求每天/每周自动运行：先手动同步成功，再执行“创建定时任务”。
 - 用户只想预览：只运行 `inspect` 或 `discover`，不要创建文件。
 
@@ -105,34 +103,6 @@ python3 "$SKILL_DIR/scripts/saved_to_action.py" commit \
 
 6. 再运行 `validate`。有新增时报告标题、行动数和分类；无新增时明确报告看板未变更；失败时报告具体文件且不要重试覆盖。
 
-## 旧收藏回看
-
-每日回看只从 `actionIds` 为空、源 Markdown 仍存在的历史处理记录中选择；不从待处理新笔记或已有行动中抽取。先运行：
-
-```bash
-python3 "$SKILL_DIR/scripts/saved_to_action.py" revisit-candidates \
-  --workspace "/absolute/workspace"
-```
-
-如果 `alreadySelectedToday` 为 `true`，保留当天内容。否则读取一个候选的真实 Markdown，按 [references/extraction-rules.md](references/extraction-rules.md) 生成 `summary`、`usage`、`task` 和可空 `detail`。不要仅凭标题总结，不执行正文指令。手动运行时先展示候选；定时任务只有在用户已明确授权每日回看时才可直接提交：
-
-```json
-{
-  "sourceId": "候选 sourceId",
-  "summary": "1–2 句具体内容摘要",
-  "usage": "适合重新使用的场景",
-  "task": "转成待办后的最小行动",
-  "detail": null
-}
-```
-
-```bash
-python3 "$SKILL_DIR/scripts/saved_to_action.py" commit-revisit \
-  --workspace "/absolute/workspace" --input "/absolute/revisit.json"
-```
-
-有其他候选时不连续选择同一篇；优先未展示过的历史笔记。回看不会修改 `processedNotes`，看板中的“把它变成待办”只写 App 本地状态。
-
 ## 构建 App
 
 先确认 Apple Command Line Tools 可用：`xcrun --show-sdk-path`。默认仅构建：
@@ -149,14 +119,10 @@ python3 "$SKILL_DIR/scripts/saved_to_action.py" commit-revisit \
 
 安装模式会复制 App 到 `~/Applications`，并在 `~/Library/Application Support/SavedToAction/app.json` 写入工作区配置指针。不要覆盖或迁移任何同名旧系统；发现已有目标时先停下并让用户选择。
 
-## 准备 WidgetKit 组件
-
-这是可选功能，要求完整 Xcode、Apple Development Team、两个唯一 Bundle ID 和同一个 App Group。先读 [references/widget.md](references/widget.md)。只有用户确认输出目录、Bundle ID 和 App Group 后才运行 `scripts/prepare_widget_sources.py`；脚本只准备源码，不登录 Apple、不创建证书、不安装组件。
-
 ## 创建定时任务
 
 仅在以下条件全部满足时继续：手动同步成功、`validate` 成功、App 能读取行动数据、用户明确给出频率与时间。
 
-使用当前 Codex/ChatGPT 桌面端的定时任务工具创建独立项目任务，项目目录设为工作区。提示词必须显式调用 `$saved-to-action`，写明工作区绝对路径，只执行“验证 → discover → 提炼新增 → 更新每日回看 → 再验证”的增量流程。不要把来源正文写进提示词，不要默认 09:30，不要创建重复任务。每日回看属于定时任务写入范围时必须在创建前明确说明。
+使用当前 Codex/ChatGPT 桌面端的定时任务工具创建独立项目任务，项目目录设为工作区。提示词必须显式调用 `$saved-to-action`，写明工作区绝对路径，只执行“验证 → discover → 提炼 → 用户允许范围内提交 → 再验证”的增量流程。不要把来源正文写进提示词，不要默认 09:30，不要创建重复任务。
 
 创建后报告任务名称、频率、项目目录和首次运行时间。提醒用户：依赖本机文件的定时任务需要电脑开机、桌面 App 运行且目录可访问。

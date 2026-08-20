@@ -168,54 +168,6 @@ class SavedToActionTests(unittest.TestCase):
         _, config, _, _ = sta.load_workspace(self.workspace)
         self.assertEqual(config["categories"], categories)
 
-    def test_daily_revisit_prefers_unseen_baseline_and_commits_atomically(self) -> None:
-        self.write("old.md", "---\ntitle: 旧笔记\ndate: 2026-01-01\n---\n旧内容")
-        self.write("newer.md", "---\ntitle: 较新笔记\ndate: 2026-01-02\n---\n新内容")
-        sta.initialize_workspace(self.workspace, [self.source()], "future", 10)
-        discovered = sta.discover_revisit(self.workspace)
-        self.assertEqual(discovered["candidateCount"], 2)
-        candidate = discovered["notes"][0]
-        batch = self.root / "revisit.json"
-        batch.write_text(json.dumps({
-            "sourceId": candidate["sourceId"],
-            "summary": "这篇笔记记录了一个可复用的方法。",
-            "usage": "当需要重新判断是否值得行动时。",
-            "task": "打开旧笔记，写下一条今天能验证的问题。",
-            "detail": None,
-        }, ensure_ascii=False), encoding="utf-8")
-        result = sta.commit_revisit(self.workspace, batch)
-        self.assertEqual(result["title"], candidate["title"])
-        _, config, _, data = sta.load_workspace(self.workspace)
-        sta.validate_data(config, data, sta.scan_notes(config))
-        self.assertEqual(data["dailyRevisit"]["sourceId"], candidate["sourceId"])
-        self.assertEqual(data["revisitHistory"], [candidate["sourceId"]])
-        self.assertTrue(sta.discover_revisit(self.workspace)["alreadySelectedToday"])
-        with self.assertRaises(sta.SavedToActionError):
-            sta.commit_revisit(self.workspace, batch)
-
-    def test_revisit_rejects_incremental_note_and_preserves_data(self) -> None:
-        self.write("idea.md", "正文")
-        sta.initialize_workspace(self.workspace, [self.source()], "all", 10)
-        _, config, data_path, data = sta.load_workspace(self.workspace)
-        note = sta.pending_notes(sta.scan_notes(config), data)[0]
-        action_batch = self.root / "actions.json"
-        action_batch.write_text(json.dumps({"notes": [{"sourceId": note.source_id, "actions": [{
-            "category": "待分类", "intent": "想保留这个想法。", "task": "打开笔记，写下一句话。", "detail": None
-        }]}]}, ensure_ascii=False), encoding="utf-8")
-        sta.commit_batch(self.workspace, action_batch)
-        before = data_path.read_bytes()
-        revisit_batch = self.root / "revisit.json"
-        revisit_batch.write_text(json.dumps({
-            "sourceId": note.source_id,
-            "summary": "摘要",
-            "usage": "场景",
-            "task": "打开笔记，写下一句话。",
-            "detail": None,
-        }, ensure_ascii=False), encoding="utf-8")
-        with self.assertRaises(sta.SavedToActionError):
-            sta.commit_revisit(self.workspace, revisit_batch)
-        self.assertEqual(data_path.read_bytes(), before)
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -22,17 +22,6 @@
   <string>1</string>
   <key>LSMinimumSystemVersion</key>
   <string>13.0</string>
-  <key>CFBundleURLTypes</key>
-  <array>
-    <dict>
-      <key>CFBundleURLName</key>
-      <string>Saved to Action</string>
-      <key>CFBundleURLSchemes</key>
-      <array>
-        <string>savedtoaction</string>
-      </array>
-    </dict>
-  </array>
   <key>LSUIElement</key>
   <true/>
   <key>NSHighResolutionCapable</key>

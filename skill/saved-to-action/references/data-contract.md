@@ -23,7 +23,7 @@
 
 ## 行动数据 `Data/actions.json`
 
-顶层字段为 `version`、`updatedAt`、`processedNotes`、`actions`、`dailyRevisit`、`revisitHistory`。
+顶层字段为 `version`、`updatedAt`、`processedNotes`、`actions`。
 
 `processedNotes` 每项包含：
 
@@ -45,15 +45,6 @@
 
 提交必须一次验证整个候选数据后原子替换。任何失败都不能追加 processedNotes。
 
-## 每日旧收藏回看
-
-`dailyRevisit` 为 `null` 或包含：`sourceId`、`sourceName`、`relativePath`、`title`、`summary`、`usage`、`task`、可空 `detail`、`savedAt`、`selectedAt`。
-
-- 只能引用 `processedNotes.actionIds` 为空且源文件仍存在的笔记。
-- `revisitHistory` 保存已展示过的 sourceId，用于优先未展示内容；不作为处理状态。
-- 每天最多更新一次；存在多个候选时不连续重复同一篇。
-- 看板转换的回看行动只进入 UserDefaults，不写回本文件。
-
 ## App 状态
 
-完成、追踪、焚毁、当前行动和由回看转换的本地行动使用 UserDefaults 键 `saved-to-action-state-v1`。同步脚本不读取、不修改、不重建该状态。启用 WidgetKit 时，App Group 内另保存只供组件读取的 `saved-to-action-widget-snapshot-v1` 快照。
+完成、追踪、焚毁和当前行动使用 UserDefaults 键 `saved-to-action-state-v1`。同步脚本不读取、不修改、不重建该状态。

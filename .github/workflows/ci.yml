@@ -44,20 +44,3 @@ jobs:
             tests/AppIntegrationTests.swift \
             -o "$RUNNER_TEMP/app-integration-tests"
           "$RUNNER_TEMP/app-integration-tests"
-      - name: WidgetKit source tests
-        run: |
-          xcrun swiftc -typecheck -target "$(uname -m)-apple-macosx14.0" \
-            -module-cache-path "$RUNNER_TEMP/widget-module-cache" \
-            -Xcc "-fmodules-cache-path=$RUNNER_TEMP/widget-clang-cache" \
-            skill/saved-to-action/assets/macos-widget/WidgetStore.swift \
-            skill/saved-to-action/assets/macos-widget/ActionIntents.swift \
-            skill/saved-to-action/assets/macos-widget/SavedToActionWidget.swift
-          python3 skill/saved-to-action/scripts/prepare_widget_sources.py \
-            --output "$RUNNER_TEMP/widget-sources" \
-            --bundle-id io.example.saved-to-action \
-            --app-group group.io.example.saved-to-action
-          plutil -lint \
-            "$RUNNER_TEMP/widget-sources/SavedToActionApp/Info.plist" \
-            "$RUNNER_TEMP/widget-sources/SavedToActionWidgetExtension/Info.plist" \
-            "$RUNNER_TEMP/widget-sources/SavedToActionApp/SavedToActionApp.entitlements" \
-            "$RUNNER_TEMP/widget-sources/SavedToActionWidgetExtension/SavedToActionWidget.entitlements"

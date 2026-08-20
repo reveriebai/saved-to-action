@@ -32,10 +32,6 @@ final class SavedToActionAppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    func application(_ application: NSApplication, open urls: [URL]) {
-        if urls.contains(where: { $0.scheme == "savedtoaction" }) { showBoard() }
-    }
-
     private func createDesktopPanel() {
         let size = NSSize(width: 438, height: 500)
         let panel = DesktopActionPanel(

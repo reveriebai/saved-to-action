@@ -74,24 +74,6 @@ struct AppIntegrationTests {
         loaded = SharedActionStore.loadActions()
         require(loaded.actions.count == 2 && loaded.actions.allSatisfy { $0.sourceURL != nil }, "incremental refresh should load new actions")
 
-        let revisit: [String: Any] = [
-            "sourceId": "note:history", "sourceName": "示例", "relativePath": "example.md",
-            "title": "旧笔记", "summary": "它记录了一个值得重看的方法。",
-            "usage": "需要重新判断下一步时。", "task": "打开旧笔记，写下一条验证问题。",
-            "detail": NSNull(), "savedAt": "2026-01-01", "selectedAt": "2026-08-20",
-        ]
-        try writeJSON([
-            "version": 1,
-            "updatedAt": "2026-01-01",
-            "actions": [action("a1", "example.md"), action("a2", "example.md")],
-            "dailyRevisit": revisit,
-        ], to: dataURL)
-        loaded = SharedActionStore.loadActions()
-        require(loaded.revisit?.sourceURL != nil, "daily revisit should resolve its original Markdown safely")
-        require(SharedActionStore.convertRevisit() != nil, "daily revisit should convert to a local action")
-        require(SharedActionStore.loadState().custom.count == 1, "converted revisit should stay in local state")
-        require(SharedActionStore.loadActions().actions.count == 3, "converted revisit should appear with regular actions")
-
         var state = BoardState(currentAction: "a1")
         state.toggleTracked("a1")
         require(state.tracked == ["a1"], "tracking should toggle on")
@@ -102,8 +84,6 @@ struct AppIntegrationTests {
 
         SharedActionStore.saveState(state)
         require(SharedActionStore.loadState() == state, "state should survive a UserDefaults round trip")
-        let legacy = try JSONDecoder().decode(BoardState.self, from: Data("{\"done\":[\"old\"],\"tracked\":[],\"burned\":[],\"currentAction\":null}".utf8))
-        require(legacy.custom.isEmpty && legacy.done == ["old"], "state migration should accept pre-revisit data")
         print("App integration tests passed")
     }
 }
