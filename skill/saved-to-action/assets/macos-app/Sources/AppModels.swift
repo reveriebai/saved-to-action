@@ -153,11 +153,6 @@ struct BoardAction: Codable {
     let hasSource: Bool
 }
 
-struct WidgetSnapshot: Codable {
-    let state: BoardState
-    let actions: [BoardAction]
-}
-
 struct RevisitItem: Hashable {
     let stored: StoredRevisit
     let sourceURL: URL?

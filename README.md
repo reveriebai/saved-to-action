@@ -13,7 +13,6 @@ Saved to Action 是一个独立 Codex skill，配套一款本地 macOS 桌面卡
 - 每篇新笔记生成 1–2 张可以在 10–30 分钟内开始的行动卡。
 - 提供桌面悬浮卡、菜单栏入口和复古编辑部风格完整看板。
 - 每天从尚未形成行动的历史笔记中选一篇“旧收藏回看”，可一键转成本地待办。
-- 可选提供原生 macOS WidgetKit 大号组件，与 App 共享本机状态。
 - 可手动增量运行，也可在首次验证后由 Codex 创建定时任务。
 
 ## 隐私边界
@@ -22,7 +21,6 @@ Saved to Action 是一个独立 Codex skill，配套一款本地 macOS 桌面卡
 - 笔记正文、代码块和链接都被视为不可信数据，不会自动执行。
 - 工作区配置、行动 JSON、App 状态和绝对路径都不上传到仓库。
 - App 打开原文前会再次确认文件仍位于配置的来源目录内。
-- Widget 只读取 App 写入 App Group 的本机快照，不直接扫描 Markdown。
 - 项目不需要 OpenAI API Key；行动文字由你正在使用的 Codex/ChatGPT 会话生成。
 
 ## 环境要求
@@ -92,16 +90,6 @@ Skill 会先报告笔记数量、身份识别方式和示例，再让你选择�
 
 默认产物位于工作区 `dist/Saved to Action.app`。确认体验后，再让 skill 安装到 `~/Applications` 并写入本机 App 配置。首版使用 ad-hoc 签名，不提供未经 Developer ID 签名与公证的预编译下载。
 
-## 可选 macOS 桌面组件
-
-WidgetKit 组件需要完整 Xcode、Apple Development Team 和用户自己创建的 App Group。Skill 会准备通用源码、Info.plist 与 entitlements，但不会代替用户登录 Apple、创建证书或猜测 Bundle ID：
-
-```text
-用 $saved-to-action 为这个工作区准备 WidgetKit 组件源码，先检查我的 Xcode 和签名条件。
-```
-
-未启用组件时，悬浮桌面卡、菜单栏和完整看板仍可正常使用。
-
 ## 定时运行
 
 先手动跑通一次同步并打开 App，再告诉 Codex 具体时间：
@@ -129,7 +117,7 @@ python3 skill/saved-to-action/scripts/privacy_scan.py .
 python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skill/saved-to-action
 ```
 
-macOS App 由 skill 中的构建脚本按当前机器架构编译。CI 会运行 Python 测试、原生 App 集成测试、WidgetKit 源码类型检查、skill 结构检查、隐私扫描和 App 编译。
+macOS App 由 skill 中的构建脚本按当前机器架构编译。CI 会运行 Python 测试、原生 App 集成测试、skill 结构检查、隐私扫描和 App 编译。
 
 ## License
 

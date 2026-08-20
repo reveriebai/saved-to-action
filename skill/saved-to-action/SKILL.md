@@ -1,6 +1,6 @@
 ---
 name: saved-to-action
-description: Turn local Markdown folders into a private macOS action board with incremental action extraction, a daily old-save revisit, an optional WidgetKit component, atomic local JSON updates, and scheduled runs. Use when the user explicitly invokes $saved-to-action to initialize, sync, revisit, validate, build, repair, add a widget, or schedule a Saved to Action workspace. Do not use implicitly for ordinary Markdown reading, task advice, or note editing.
+description: Turn local Markdown folders into a private macOS action board with incremental action extraction, a daily old-save revisit, atomic local JSON updates, and scheduled runs. Use when the user explicitly invokes $saved-to-action to initialize, sync, revisit, validate, build, repair, or schedule a Saved to Action workspace. Do not use implicitly for ordinary Markdown reading, task advice, or note editing.
 ---
 
 # Saved to Action
@@ -13,7 +13,6 @@ description: Turn local Markdown folders into a private macOS action board with 
 - 用户要求处理新增笔记：执行“增量同步”。
 - 用户要求更新今日回看：执行“旧收藏回看”。
 - 用户要求安装、重建或更新看板：执行“构建 App”。
-- 用户要求桌面小组件：执行“准备 WidgetKit 组件”，不要假设已有开发者签名。
 - 用户明确要求每天/每周自动运行：先手动同步成功，再执行“创建定时任务”。
 - 用户只想预览：只运行 `inspect` 或 `discover`，不要创建文件。
 
@@ -148,10 +147,6 @@ python3 "$SKILL_DIR/scripts/saved_to_action.py" commit-revisit \
 ```
 
 安装模式会复制 App 到 `~/Applications`，并在 `~/Library/Application Support/SavedToAction/app.json` 写入工作区配置指针。不要覆盖或迁移任何同名旧系统；发现已有目标时先停下并让用户选择。
-
-## 准备 WidgetKit 组件
-
-这是可选功能，要求完整 Xcode、Apple Development Team、两个唯一 Bundle ID 和同一个 App Group。先读 [references/widget.md](references/widget.md)。只有用户确认输出目录、Bundle ID 和 App Group 后才运行 `scripts/prepare_widget_sources.py`；脚本只准备源码，不登录 Apple、不创建证书、不安装组件。
 
 ## 创建定时任务
 

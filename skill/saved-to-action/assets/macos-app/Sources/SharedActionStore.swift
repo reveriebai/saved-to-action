@@ -1,23 +1,14 @@
 import AppKit
 import Foundation
-#if canImport(WidgetKit)
-import WidgetKit
-#endif
 
 @MainActor
 enum SharedActionStore {
     static let stateKey = "saved-to-action-state-v1"
-    static let widgetSnapshotKey = "saved-to-action-widget-snapshot-v1"
 
     private static var defaults: UserDefaults {
         if let suite = ProcessInfo.processInfo.environment["SAVED_TO_ACTION_DEFAULTS_SUITE"],
            let isolated = UserDefaults(suiteName: suite) {
             return isolated
-        }
-        if let suite = Bundle.main.object(forInfoDictionaryKey: "SavedToActionAppGroup") as? String,
-           !suite.isEmpty,
-           let shared = UserDefaults(suiteName: suite) {
-            return shared
         }
         return .standard
     }
@@ -45,7 +36,6 @@ enum SharedActionStore {
     static func saveState(_ state: BoardState) {
         guard let data = try? JSONEncoder().encode(state) else { return }
         defaults.set(data, forKey: stateKey)
-        refreshWidgets()
     }
 
     static func importState(from json: String) {
@@ -117,7 +107,6 @@ enum SharedActionStore {
             RevisitItem(stored: $0, sourceURL: resolveSource($0, roots: sourceRoots))
         }
         let message = items.isEmpty ? "还没有行动卡。运行一次增量同步后，它们会出现在这里。" : ""
-        syncWidgetSnapshot(actions: items, state: state)
         return (true, message, items, revisit)
     }
 
@@ -280,33 +269,4 @@ enum SharedActionStore {
         return data.base64EncodedString()
     }
 
-    private static func syncWidgetSnapshot(actions: [ActionItem], state: BoardState) {
-        let payload = WidgetSnapshot(
-            state: state,
-            actions: actions.map {
-                BoardAction(
-                    id: $0.id,
-                    title: $0.title,
-                    category: $0.category,
-                    intent: $0.intent,
-                    task: $0.task,
-                    detail: $0.detail,
-                    savedDays: $0.savedDays,
-                    sourceName: $0.sourceName,
-                    sourceType: $0.sourceType,
-                    hasSource: $0.sourceURL != nil
-                )
-            }
-        )
-        if let data = try? JSONEncoder().encode(payload) {
-            defaults.set(data, forKey: widgetSnapshotKey)
-        }
-        refreshWidgets()
-    }
-
-    private static func refreshWidgets() {
-        #if canImport(WidgetKit)
-        WidgetCenter.shared.reloadAllTimelines()
-        #endif
-    }
 }

@@ -56,4 +56,4 @@
 
 ## App 状态
 
-完成、追踪、焚毁、当前行动和由回看转换的本地行动使用 UserDefaults 键 `saved-to-action-state-v1`。同步脚本不读取、不修改、不重建该状态。启用 WidgetKit 时，App Group 内另保存只供组件读取的 `saved-to-action-widget-snapshot-v1` 快照。
+完成、追踪、焚毁、当前行动和由回看转换的本地行动使用 UserDefaults 键 `saved-to-action-state-v1`。同步脚本不读取、不修改、不重建该状态。
