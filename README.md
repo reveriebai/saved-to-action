@@ -54,7 +54,7 @@ Markdown / Get笔记 / IMA
 仓库公开后，直接告诉 Codex：
 
 ```text
-请用 $skill-installer 从 mining2277-hub/saved-to-action 的
+请用 $skill-installer 从 reveriebai/saved-to-action 的
 skill/saved-to-action 安装 skill。
 ```
 
@@ -62,7 +62,7 @@ skill/saved-to-action 安装 skill。
 
 ```bash
 python3 ~/.codex/skills/.system/skill-installer/scripts/install-skill-from-github.py \
-  --repo mining2277-hub/saved-to-action \
+  --repo reveriebai/saved-to-action \
   --path skill/saved-to-action
 ```
 
