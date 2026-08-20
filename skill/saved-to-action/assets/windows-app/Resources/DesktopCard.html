@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>今日行动</title>
+<style>
+  :root{--ink:#2e261f;--wine:#963f2d;--paper:#f2e8d3;--line:#a98661;--muted:#6b594b}
+  *{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden}body{background:var(--paper);color:var(--ink);font-family:Georgia,"Microsoft YaHei UI","SimSun",serif}
+  .card{height:100%;padding:28px 28px 22px;display:flex;flex-direction:column;background:linear-gradient(140deg,rgba(255,255,255,.18),transparent 47%),var(--paper)}
+  header{display:flex;justify-content:space-between;align-items:flex-start;cursor:move;user-select:none}.date{font:700 11px/1.2 Georgia,serif;letter-spacing:.13em;color:var(--wine)}h1{font-size:30px;line-height:1;margin:8px 0 0}.motto{font-size:10px;color:var(--muted);margin:7px 0 0;white-space:nowrap}.days{border:1px solid var(--line);border-radius:22px;padding:8px 13px;font:600 11px/1 "Microsoft YaHei UI",sans-serif;color:var(--muted)}
+  .rule{display:flex;align-items:center;gap:10px;margin:20px 0 17px}.rule:before{content:"";height:1px;background:var(--line);flex:1}.rule span{font:bold 13px Georgia;color:var(--wine)}
+  .source{font:600 11px/1.3 "Microsoft YaHei UI",sans-serif;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.intent{font-size:14px;line-height:1.55;color:var(--muted);margin:14px 0 0;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}.task{font-size:21px;line-height:1.35;margin:17px 0 0;font-weight:700;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}.detail{font:12px/1.5 "Microsoft YaHei UI",sans-serif;color:var(--muted);margin:10px 0 0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.spacer{flex:1}
+  .buttons{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}.button{height:39px;border:1px solid var(--line);background:transparent;color:var(--muted);font:600 12px "Microsoft YaHei UI",sans-serif;cursor:pointer}.button:hover{background:rgba(150,63,45,.06)}.button.primary{background:#6a5849;color:#fff;border-color:#6a5849}.footer{display:flex;justify-content:space-between;align-items:center;margin-top:12px}.link{border:0;background:none;padding:0;color:var(--wine);font:600 11px "Microsoft YaHei UI",sans-serif;cursor:pointer}.link.board{color:var(--muted)}
+  .empty{font-size:15px;line-height:1.6;color:var(--muted);margin-top:20px}.hidden{display:none!important}
+</style>
+<body><main class="card">
+  <header id="drag"><div><div class="date" id="date"></div><h1>今日行动</h1><p class="motto">把曾经留下的，慢慢变成正在发生的。</p></div><div class="days" id="days">等待数据</div></header>
+  <div class="rule"><span>01</span></div>
+  <section id="content"><div class="source" id="source"></div><p class="intent" id="intent"></p><h2 class="task" id="task"></h2><p class="detail" id="detail"></p></section>
+  <p class="empty hidden" id="empty"></p><div class="spacer"></div>
+  <div class="buttons" id="buttons"><button class="button" id="next">↻ 换一张</button><button class="button" id="original">查看原文</button><button class="button primary" id="complete">完成</button></div>
+  <footer class="footer"><button class="link" id="burn">阅后即焚</button><button class="link board" id="board">打开完整看板 ↗</button></footer>
+</main>
+<script>
+  let payload={configured:false,message:'等待 App 传入数据。',state:{done:[],tracked:[],burned:[],currentAction:null,custom:[]},actions:[],dailyRevisit:null};
+  const $=id=>document.getElementById(id),post=(name,value='')=>window.chrome?.webview?.postMessage({name,payload:value});
+  function current(){let open=payload.actions.filter(x=>!payload.state.done.includes(x.id)&&!payload.state.burned.includes(x.id));if(!open.length)return null;return open.find(x=>x.id===payload.state.currentAction)||open[0]}
+  function render(){let now=new Date();$('date').textContent=new Intl.DateTimeFormat('zh-CN',{month:'long',day:'numeric',weekday:'short'}).format(now);let item=current(),empty=!item;$('content').classList.toggle('hidden',empty);$('buttons').classList.toggle('hidden',empty);$('burn').classList.toggle('hidden',empty);$('empty').classList.toggle('hidden',!empty);if(empty){$('days').textContent='暂无行动';$('empty').textContent=payload.message||'目前没有仍开放的行动卡。';return}$('days').textContent=`已收藏 ${item.savedDays} 天`;$('source').textContent=`来自「${item.title}」`;$('intent').textContent=item.intent;$('task').textContent=item.task;$('detail').textContent=item.detail||'';$('detail').classList.toggle('hidden',!item.detail);$('original').classList.toggle('hidden',!item.hasSource)}
+  $('drag').addEventListener('pointerdown',()=>post('beginDrag'));
+  $('next').onclick=()=>post('next');$('complete').onclick=()=>{let item=current();if(item)post('complete',item.id)};$('original').onclick=()=>{let item=current();if(item)post('openSource',item.id)};$('burn').onclick=()=>{let item=current();if(item&&confirm('这张行动卡将被永久关闭，但不会删除收藏原文。'))post('burn',item.id)};$('board').onclick=()=>post('openBoard');
+  window.applyNativePayloadBase64=value=>{try{let bytes=Uint8Array.from(atob(value),c=>c.charCodeAt(0));payload=JSON.parse(new TextDecoder().decode(bytes));payload.state.custom=payload.state.custom||[];render()}catch(error){payload={configured:false,message:'看板数据无法解析。',state:{done:[],tracked:[],burned:[],currentAction:null,custom:[]},actions:[],dailyRevisit:null};render()}};
+  render();
+</script></body></html>

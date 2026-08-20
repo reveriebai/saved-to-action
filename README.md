@@ -2,7 +2,7 @@
 
 > 把曾经留下的，慢慢变成正在发生的。
 
-我们总会在 Markdown、Get笔记或 IMA 里留下很多“以后再看”。Saved to Action 会从这些收藏中提炼出一个真正能开始的下一步，把它放到 macOS 桌面，而不是再建一个需要维护的收藏夹。
+我们总会在 Markdown、Get笔记或 IMA 里留下很多“以后再看”。Saved to Action 会从这些收藏中提炼出一个真正能开始的下一步，把它放到桌面，而不是再建一个需要维护的收藏夹。目前正式支持 macOS，并提供实验性的 Windows 本地构建。
 
 每张行动卡只回答三件事：**我当时为什么收藏、现在可以做什么、原文在哪里。** 默认行动可以在 10–30 分钟内启动。
 
@@ -88,7 +88,7 @@ Skill 会先检查来源是否能读取，报告匹配数量和少量示例。�
 - **最近 N 篇**：先从少量收藏开始体验。
 - **处理全部**：为当前所有可读取收藏生成行动。
 
-初始化前你会看到预计笔记数和行动卡数量范围。确认来源、导入范围与工作区后，Skill 会创建独立工作区；随后提炼行动，通过校验后直接写入本地 JSON，并为你构建 macOS 看板。
+初始化前你会看到预计笔记数和行动卡数量范围。确认来源、导入范围与工作区后，Skill 会创建独立工作区；随后提炼行动，通过校验后直接写入本地 JSON，并为你构建当前平台的看板。
 
 默认分类为：工作与项目、学习与研究、创作与表达、健康与生活、工具与系统、待分类。可以在本地配置中覆盖。
 
@@ -120,6 +120,19 @@ Skill 会先检查来源是否能读取，报告匹配数量和少量示例。�
 默认产物位于工作区 `dist/Saved to Action.app`。确认体验后，再让 Skill 安装到 `~/Applications` 并写入本机 App 配置。
 
 首版使用 ad-hoc 签名，只提供本地源码构建，不发布未经 Developer ID 签名和 notarization 的预编译 App。
+
+### 构建 Windows App（实验性）
+
+Windows 用户可以在自己的电脑上运行：
+
+```text
+用 $saved-to-action 为“C:\绝对路径\工作区”构建 Windows 看板，
+先不要安装。
+```
+
+Skill 会用 `.NET 8 + WPF + WebView2` 构建与 macOS 共用行动 JSON 和完整看板界面的本地 App。默认产物位于工作区 `dist\windows\win-x64\` 或 `dist\windows\win-arm64\`；确认后才会安装到 `%LOCALAPPDATA%\Programs\SavedToAction\`。
+
+Windows 版包含桌面行动卡、系统托盘、完整看板、完成、追踪、阅后即焚、打开原文和每日旧收藏回看。状态独立保存在 `%LOCALAPPDATA%\SavedToAction\`，不会与 macOS 或同步 JSON 混用。首版不提供未签名的预编译 `.exe`，也不建议绕过 Windows 安全提示。
 
 ### 设置定时运行
 
@@ -157,17 +170,17 @@ Markdown 的“最近”优先依据 frontmatter 的 `created` / `date`，Get笔
 
 ## 环境要求
 
-- macOS 13 或更高版本。
 - Python 3。
-- Apple Command Line Tools，可通过 `xcrun --show-sdk-path` 检查。
-- Codex CLI、IDE 扩展或 ChatGPT 桌面端；只有桌面端提供定时任务管理界面。
+- macOS：macOS 13 或更高版本，以及 Apple Command Line Tools。
+- Windows（实验性）：Windows 10/11、PowerShell 7、.NET 8 SDK 和 Microsoft Edge WebView2 Runtime。
+- Codex CLI、IDE 扩展或支持 Agent Skills 的本地 Agent；定时任务能力取决于所用 Agent。
 - 使用 Get笔记时，需要安装并登录 `getnote` CLI。
 - 使用 IMA 时，需要在 IMA OpenAPI 页面获取 Client ID 与 API Key，并按 IMA skill 的方式保存在环境变量或 `~/.config/ima/`。
 
 ## 卸载
 
 1. 在 Skills 中禁用或删除 `saved-to-action`。
-2. 退出并移除 `~/Applications/Saved to Action.app`（如果安装过）。
+2. 退出并移除 `~/Applications/Saved to Action.app`，或 Windows 的 `%LOCALAPPDATA%\Programs\SavedToAction\`（如果安装过）。
 3. 确认不再需要行动历史后，再删除你自己选择的工作目录。
 4. 如创建过定时任务，在桌面端 Scheduled 中暂停或删除。
 
@@ -181,7 +194,7 @@ python3 skill/saved-to-action/scripts/privacy_scan.py .
 python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skill/saved-to-action
 ```
 
-macOS App 由 Skill 中的构建脚本按当前机器架构编译。CI 会运行 Python 测试、原生 App 集成测试、Skill 结构检查、隐私扫描和 App 编译。
+macOS App 由 Skill 中的构建脚本按当前机器架构编译。Windows App 由独立的 Windows CI 构建并运行状态、损坏数据和路径边界测试。CI 通过不等于真实 Windows 桌面人工验收，因此 Windows 在真实设备验证前保持实验性。
 
 ## License
 

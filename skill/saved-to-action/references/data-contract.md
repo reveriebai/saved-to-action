@@ -59,8 +59,8 @@ Markdown 的 `savedAt` 优先读取 frontmatter 的 `created`、其次 `date`；
 - 只能引用 `processedNotes.actionIds` 为空且来源仍可发现的笔记。
 - `revisitHistory` 保存已展示过的 sourceId，用于优先未展示内容；不作为处理状态。
 - 每天最多更新一次；存在多个候选时不连续重复同一篇。
-- 看板转换的回看行动只进入 UserDefaults，不写回本文件。
+- 看板转换的回看行动只进入平台本地状态，不写回本文件。
 
 ## App 状态
 
-完成、追踪、焚毁、当前行动和由回看转换的本地行动使用 UserDefaults 键 `saved-to-action-state-v1`。同步脚本不读取、不修改、不重建该状态。回看转换为本地行动时保留经过验证的 `sourceURL`，不刷新或写回来源。
+完成、追踪、焚毁、当前行动和由回看转换的本地行动使用独立的 `saved-to-action-state-v1` 状态：macOS 存在 UserDefaults；Windows 存在 `%LOCALAPPDATA%\SavedToAction\saved-to-action-state-v1.json`。同步脚本不读取、不修改、不重建该状态。Windows 使用同目录临时文件后替换，App 数据损坏时降级为空状态而不改行动 JSON。回看转换为本地行动时保留经过验证的 `sourceURL`，不刷新或写回来源。
