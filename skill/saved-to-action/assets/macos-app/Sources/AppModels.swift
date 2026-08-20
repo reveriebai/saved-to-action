@@ -20,6 +20,7 @@ struct ActionFile: Decodable {
     let version: Int
     let updatedAt: String?
     let actions: [StoredAction]
+    let dailyRevisit: StoredRevisit?
 }
 
 struct StoredAction: Decodable, Identifiable, Hashable {
@@ -36,11 +37,62 @@ struct StoredAction: Decodable, Identifiable, Hashable {
     let sourceType: String
 }
 
+struct StoredRevisit: Decodable, Hashable {
+    let sourceId: String
+    let sourceName: String
+    let relativePath: String
+    let title: String
+    let summary: String
+    let usage: String
+    let task: String
+    let detail: String?
+    let savedAt: String
+    let selectedAt: String
+}
+
+struct LocalAction: Codable, Equatable, Identifiable {
+    let id: String
+    let sourceId: String
+    let sourceName: String
+    let relativePath: String
+    let title: String
+    let task: String
+    let intent: String
+    let detail: String?
+    let savedAt: String
+}
+
 struct BoardState: Codable, Equatable {
     var done: [String] = []
     var tracked: [String] = []
     var burned: [String] = []
     var currentAction: String?
+    var custom: [LocalAction] = []
+
+    enum CodingKeys: String, CodingKey { case done, tracked, burned, currentAction, custom }
+
+    init(
+        done: [String] = [],
+        tracked: [String] = [],
+        burned: [String] = [],
+        currentAction: String? = nil,
+        custom: [LocalAction] = []
+    ) {
+        self.done = done
+        self.tracked = tracked
+        self.burned = burned
+        self.currentAction = currentAction
+        self.custom = custom
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        done = try container.decodeIfPresent([String].self, forKey: .done) ?? []
+        tracked = try container.decodeIfPresent([String].self, forKey: .tracked) ?? []
+        burned = try container.decodeIfPresent([String].self, forKey: .burned) ?? []
+        currentAction = try container.decodeIfPresent(String.self, forKey: .currentAction)
+        custom = try container.decodeIfPresent([LocalAction].self, forKey: .custom) ?? []
+    }
 
     mutating func complete(_ id: String) {
         if !done.contains(id) { done.append(id) }
@@ -88,7 +140,7 @@ struct ActionItem: Identifiable, Hashable {
     }
 }
 
-struct BoardAction: Encodable {
+struct BoardAction: Codable {
     let id: String
     let title: String
     let category: String
@@ -101,9 +153,44 @@ struct BoardAction: Encodable {
     let hasSource: Bool
 }
 
+struct WidgetSnapshot: Codable {
+    let state: BoardState
+    let actions: [BoardAction]
+}
+
+struct RevisitItem: Hashable {
+    let stored: StoredRevisit
+    let sourceURL: URL?
+
+    var savedDays: Int { daysSince(stored.savedAt) }
+}
+
+struct BoardRevisit: Encodable {
+    let sourceId: String
+    let title: String
+    let summary: String
+    let usage: String
+    let task: String
+    let detail: String?
+    let savedDays: Int
+    let selectedAt: String
+    let hasSource: Bool
+    let converted: Bool
+}
+
 struct BoardPayload: Encodable {
     let configured: Bool
     let message: String
     let state: BoardState
     let actions: [BoardAction]
+    let dailyRevisit: BoardRevisit?
+}
+
+func daysSince(_ dateString: String) -> Int {
+    let formatter = DateFormatter()
+    formatter.calendar = Calendar(identifier: .gregorian)
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.dateFormat = "yyyy-MM-dd"
+    guard let savedDate = formatter.date(from: dateString) else { return 0 }
+    return max(0, Calendar(identifier: .gregorian).dateComponents([.day], from: savedDate, to: Date()).day ?? 0)
 }

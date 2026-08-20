@@ -318,6 +318,8 @@ def initialize_workspace(
         "updatedAt": now_iso(),
         "processedNotes": [baseline_record(note) for note in baseline],
         "actions": [],
+        "dailyRevisit": None,
+        "revisitHistory": [],
     }
     validate_data(config, data, notes)
     atomic_write_json(config_path, config)
@@ -441,6 +443,47 @@ def validate_data(config: dict[str, Any], data: dict[str, Any], notes: list[Note
                 or action["collectionTitle"] != item["title"]
             ):
                 raise SavedToActionError("行动与处理记录的来源引用不一致")
+    history = data.get("revisitHistory", [])
+    if (
+        not isinstance(history, list)
+        or any(not isinstance(source_id, str) or not source_id for source_id in history)
+        or len(history) != len(set(history))
+    ):
+        raise SavedToActionError("revisitHistory 必须是不重复的 sourceId 数组")
+    revisit = data.get("dailyRevisit")
+    if revisit is not None:
+        if not isinstance(revisit, dict):
+            raise SavedToActionError("dailyRevisit 必须是对象或 null")
+        required = [
+            "sourceId",
+            "sourceName",
+            "relativePath",
+            "title",
+            "summary",
+            "usage",
+            "task",
+            "savedAt",
+            "selectedAt",
+        ]
+        missing = [key for key in required if not isinstance(revisit.get(key), str) or not revisit[key].strip()]
+        if missing:
+            raise SavedToActionError(f"dailyRevisit 字段缺失：{', '.join(missing)}")
+        detail = revisit.get("detail")
+        if detail is not None and not isinstance(detail, str):
+            raise SavedToActionError("dailyRevisit.detail 必须是字符串或 null")
+        record = processed_by_source.get(revisit["sourceId"])
+        if (
+            record is None
+            or record.get("actionIds") != []
+            or record.get("sourceName") != revisit["sourceName"]
+            or record.get("relativePath") != revisit["relativePath"]
+            or record.get("title") != revisit["title"]
+        ):
+            raise SavedToActionError("dailyRevisit 必须引用尚未生成行动的已处理笔记")
+        if revisit["sourceName"] not in source_names or not safe_relative_path(revisit["relativePath"]):
+            raise SavedToActionError("dailyRevisit 来源名称或相对路径无效")
+        if revisit["sourceId"] not in history:
+            raise SavedToActionError("dailyRevisit sourceId 必须记录在 revisitHistory")
     if notes is not None:
         known = {note.source_id: note for note in notes}
         for item in processed:
@@ -542,6 +585,97 @@ def commit_batch(workspace: Path, batch_path: Path) -> dict[str, Any]:
     }
 
 
+def eligible_revisit_notes(config: dict[str, Any], data: dict[str, Any], notes: list[Note]) -> list[Note]:
+    note_by_id = {note.source_id: note for note in notes}
+    eligible: list[Note] = []
+    for item in data.get("processedNotes", []):
+        if not isinstance(item, dict) or item.get("actionIds") != []:
+            continue
+        note = note_by_id.get(item.get("sourceId"))
+        if note is not None:
+            eligible.append(note)
+    history = set(data.get("revisitHistory", []))
+    current_id = (data.get("dailyRevisit") or {}).get("sourceId")
+    eligible.sort(
+        key=lambda note: (
+            note.source_id in history,
+            note.source_id == current_id,
+            note.saved_at,
+            note.relative_path,
+        )
+    )
+    return eligible
+
+
+def discover_revisit(workspace: Path) -> dict[str, Any]:
+    _, config, _, data = load_workspace(workspace)
+    notes = scan_notes(config)
+    validate_data(config, data, notes)
+    current = data.get("dailyRevisit")
+    already_selected_today = isinstance(current, dict) and current.get("selectedAt") == today_iso()
+    candidates = [] if already_selected_today else eligible_revisit_notes(config, data, notes)
+    return {
+        "alreadySelectedToday": already_selected_today,
+        "current": current,
+        "candidateCount": len(candidates),
+        "notes": [note.public_dict() for note in candidates],
+    }
+
+
+def commit_revisit(workspace: Path, batch_path: Path) -> dict[str, Any]:
+    _, config, data_path, data = load_workspace(workspace)
+    notes = scan_notes(config)
+    validate_data(config, data, notes)
+    current = data.get("dailyRevisit")
+    if isinstance(current, dict) and current.get("selectedAt") == today_iso():
+        raise SavedToActionError("今天已经更新过旧收藏回看")
+    batch = read_json(batch_path.expanduser().resolve())
+    source_id = batch.get("sourceId")
+    eligible = {note.source_id: note for note in eligible_revisit_notes(config, data, notes)}
+    note = eligible.get(source_id)
+    if note is None:
+        raise SavedToActionError("回看候选不是当前合格的历史笔记")
+    if len(eligible) > 1 and isinstance(current, dict) and current.get("sourceId") == source_id:
+        raise SavedToActionError("存在其他候选时不能连续选择同一篇回看")
+    values: dict[str, str] = {}
+    for key in ("summary", "usage", "task"):
+        value = batch.get(key)
+        if not isinstance(value, str) or not value.strip():
+            raise SavedToActionError(f"回看候选 {key} 不能为空")
+        values[key] = value.strip()
+    detail = batch.get("detail")
+    if detail is not None and not isinstance(detail, str):
+        raise SavedToActionError("回看候选 detail 必须是字符串或 null")
+    revisit = {
+        "sourceId": note.source_id,
+        "sourceName": note.source_name,
+        "relativePath": note.relative_path,
+        "title": note.title,
+        "summary": values["summary"],
+        "usage": values["usage"],
+        "task": values["task"],
+        "detail": detail.strip() if isinstance(detail, str) and detail.strip() else None,
+        "savedAt": note.saved_at,
+        "selectedAt": today_iso(),
+    }
+    history = list(data.get("revisitHistory", []))
+    if note.source_id not in history:
+        history.append(note.source_id)
+    candidate_data = {
+        **data,
+        "updatedAt": now_iso(),
+        "dailyRevisit": revisit,
+        "revisitHistory": history,
+    }
+    validate_data(config, candidate_data, notes)
+    atomic_write_json(data_path, candidate_data)
+    return {
+        "title": note.title,
+        "selectedAt": revisit["selectedAt"],
+        "dataPath": str(data_path),
+    }
+
+
 def app_support_path() -> Path:
     return Path.home() / "Library" / "Application Support" / "SavedToAction" / "app.json"
 
@@ -596,6 +730,14 @@ def build_parser() -> argparse.ArgumentParser:
     commit_parser.add_argument("--workspace", required=True)
     commit_parser.add_argument("--input", required=True)
 
+    subparsers.add_parser("revisit-candidates", help="列出今日旧收藏回看候选").add_argument(
+        "--workspace", required=True
+    )
+
+    revisit_parser = subparsers.add_parser("commit-revisit", help="验证并原子提交今日旧收藏回看")
+    revisit_parser.add_argument("--workspace", required=True)
+    revisit_parser.add_argument("--input", required=True)
+
     validate_parser = subparsers.add_parser("validate", help="验证配置和行动数据")
     validate_parser.add_argument("--workspace", required=True)
 
@@ -627,6 +769,10 @@ def main(argv: list[str] | None = None) -> int:
             result = {"pendingCount": len(pending), "notes": [note.public_dict() for note in pending]}
         elif args.command == "commit":
             result = commit_batch(Path(args.workspace), Path(args.input))
+        elif args.command == "revisit-candidates":
+            result = discover_revisit(Path(args.workspace))
+        elif args.command == "commit-revisit":
+            result = commit_revisit(Path(args.workspace), Path(args.input))
         elif args.command == "validate":
             _, config, data_path, data = load_workspace(Path(args.workspace))
             notes = scan_notes(config)
