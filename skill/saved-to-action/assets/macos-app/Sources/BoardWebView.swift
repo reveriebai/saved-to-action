@@ -29,6 +29,8 @@ struct BoardWebView: NSViewRepresentable {
         let controller = WKUserContentController()
         controller.add(coordinator, name: "boardStateDidChange")
         controller.add(coordinator, name: "openSource")
+        controller.add(coordinator, name: "convertRevisit")
+        controller.add(coordinator, name: "openRevisit")
         let configuration = WKWebViewConfiguration()
         configuration.userContentController = controller
         let webView = InteractiveWKWebView(frame: .zero, configuration: configuration)
@@ -69,6 +71,12 @@ struct BoardWebView: NSViewRepresentable {
                 pushPayload()
             } else if message.name == "openSource", let id = message.body as? String {
                 SharedActionStore.openSource(actionID: id)
+            } else if message.name == "convertRevisit" {
+                _ = SharedActionStore.convertRevisit()
+                model.reload()
+                pushPayload()
+            } else if message.name == "openRevisit" {
+                SharedActionStore.openRevisitSource()
             }
         }
 
