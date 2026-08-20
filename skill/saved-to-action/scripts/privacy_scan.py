@@ -23,7 +23,7 @@ ALLOWED_URL_HOSTS = {
     "www.biji.com",
     "schemas.microsoft.com",
 }
-SKIP_PARTS = {".git", ".build", "dist", "__pycache__"}
+SKIP_PARTS = {".git", ".build", "bin", "obj", "dist", "__pycache__"}
 BINARY_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".pdf", ".app", ".swiftmodule", ".pcm"}
 
 
