@@ -1,5 +1,6 @@
 using Microsoft.Win32.SafeHandles;
 using System.ComponentModel;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 

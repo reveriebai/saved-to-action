@@ -2,6 +2,7 @@ using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.IO;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Input;
@@ -22,7 +23,7 @@ public abstract class WebViewHostWindow : Window
         Store = store;
         _resourceName = resourceName;
         _isQuitting = isQuitting;
-        Background = new SolidColorBrush(Color.FromRgb(239, 226, 208));
+        Background = new SolidColorBrush(System.Windows.Media.Color.FromRgb(239, 226, 208));
         Content = WebView;
         Loaded += OnLoaded;
         Closing += OnClosing;
