@@ -2,21 +2,19 @@
 
 > 把曾经留下的，慢慢变成正在发生的。
 
-我们总会在 Markdown、Get笔记或 IMA 里留下很多“以后再看”。Saved to Action 会从这些收藏中提炼出一个真正能开始的下一步，把它放到桌面，而不是再建一个需要维护的收藏夹。目前正式支持 macOS，并提供实验性的 Windows 本地构建。
+我们总会在 Obsidian、Get笔记或 IMA 里留下很多“以后再看”。Saved to Action 会从这些收藏中提炼出一个真正能开始的下一步，把它放到桌面，而不是再建一个需要维护的收藏夹。目前正式支持 macOS，并提供实验性的 Windows 本地构建。
 
 每张行动卡只回答三件事：**我当时为什么收藏、现在可以做什么、原文在哪里。** 默认行动可以在 10–30 分钟内启动。
 
 <p align="center">
-  <img src="docs/images/desktop-action-card.png" alt="Saved to Action 桌面今日行动卡" width="430">
+  <img src="docs/images/desktop-action-card.webp" alt="Saved to Action 桌面今日行动卡" width="430">
 </p>
 
 桌面卡一次只出现一个行动。你可以换一张、查看原文、完成，或者让它阅后即焚。
 
-![Saved to Action 完整行动看板](docs/images/full-action-board.png)
+![Saved to Action 完整行动看板](docs/images/full-action-board.webp)
 
 完整看板一次展示六张卡，可以分类浏览和回看。截图中的收藏与行动均为虚构示例。
-
-> 当前仓库处于私有验收阶段。转为公开后，其他用户才能直接从 GitHub 安装。
 
 ## 它是怎么工作的
 
