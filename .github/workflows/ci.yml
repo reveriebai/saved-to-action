@@ -5,7 +5,7 @@ on:
   pull_request:
 
 jobs:
-  test:
+  macos:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -44,3 +44,35 @@ jobs:
             tests/AppIntegrationTests.swift \
             -o "$RUNNER_TEMP/app-integration-tests"
           "$RUNNER_TEMP/app-integration-tests"
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Windows state and path tests
+        shell: pwsh
+        run: dotnet run --project tests/windows/WindowsIntegrationHarness.csproj --configuration Release
+      - name: Build Windows app
+        shell: pwsh
+        run: |
+          $fixture = Join-Path $env:RUNNER_TEMP "notes"
+          $workspace = Join-Path $env:RUNNER_TEMP "workspace"
+          New-Item -ItemType Directory -Path $fixture -Force | Out-Null
+          Set-Content -LiteralPath (Join-Path $fixture "example.md") -Value "# 示例" -Encoding utf8
+          python skill/saved-to-action/scripts/saved_to_action.py init `
+            --workspace $workspace --source "示例=$fixture" --mode future
+          & skill/saved-to-action/scripts/build_windows_app.ps1 `
+            -Workspace $workspace -Runtime win-x64
+          $exe = Join-Path $workspace "dist/windows/win-x64/SavedToAction.exe"
+          if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {
+            throw "Windows build did not produce SavedToAction.exe"
+          }
+      - name: Privacy scan
+        shell: pwsh
+        run: python skill/saved-to-action/scripts/privacy_scan.py .

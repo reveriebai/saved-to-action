@@ -28,10 +28,11 @@
   const uniq=(list,id)=>list.includes(id)?list:[...list,id];
   const openActions=()=>payload.actions.filter(x=>!payload.state.done.includes(x.id)&&!payload.state.burned.includes(x.id));
   const actionById=id=>payload.actions.find(x=>x.id===id);
-  function sendState(){window.webkit?.messageHandlers?.boardStateDidChange?.postMessage(JSON.stringify(payload.state));render()}
-  function openSource(id){window.webkit?.messageHandlers?.openSource?.postMessage(id)}
-  function openRevisit(){window.webkit?.messageHandlers?.openRevisit?.postMessage('open')}
-  function convertRevisit(){window.webkit?.messageHandlers?.convertRevisit?.postMessage('convert')}
+  function postNative(name,value){let apple=window.webkit?.messageHandlers?.[name];if(apple){apple.postMessage(typeof value==='string'?value:JSON.stringify(value));return}window.chrome?.webview?.postMessage({name,payload:value})}
+  function sendState(){postNative('boardStateDidChange',payload.state);render()}
+  function openSource(id){postNative('openSource',id)}
+  function openRevisit(){postNative('openRevisit','open')}
+  function convertRevisit(){postNative('convertRevisit','convert')}
   function current(){let open=openActions();if(!open.length)return null;let found=open.find(x=>x.id===payload.state.currentAction);if(found)return found;payload.state.currentAction=open[0].id;return open[0]}
   function next(){let open=openActions();if(!open.length)return;let index=open.findIndex(x=>x.id===payload.state.currentAction);payload.state.currentAction=open[(index+1+open.length)%open.length].id;sendState()}
   function complete(id){payload.state.done=uniq(payload.state.done,id);payload.state.tracked=payload.state.tracked.filter(x=>x!==id);payload.state.burned=payload.state.burned.filter(x=>x!==id);if(payload.state.currentAction===id)payload.state.currentAction=null;sendState()}

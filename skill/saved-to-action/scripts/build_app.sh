@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="${0:A:h}"
 SKILL_DIR="${SCRIPT_DIR:h}"
 APP_SOURCE_DIR="$SKILL_DIR/assets/macos-app"
+SHARED_ASSET_DIR="$SKILL_DIR/assets/shared"
 WORKSPACE=""
 INSTALL=false
 
@@ -60,7 +61,7 @@ xcrun swiftc \
   -o "$MACOS_DIR/SavedToActionDesktop"
 
 cp "$APP_SOURCE_DIR/Info.plist" "$APP_BUNDLE/Contents/Info.plist"
-cp "$APP_SOURCE_DIR/Resources/Board.html" "$RESOURCES_DIR/Board.html"
+cp "$SHARED_ASSET_DIR/Board.html" "$RESOURCES_DIR/Board.html"
 python3 "$SCRIPT_DIR/saved_to_action.py" configure-app \
   --workspace "$WORKSPACE" \
   --output "$RESOURCES_DIR/AppConfig.json" >/dev/null

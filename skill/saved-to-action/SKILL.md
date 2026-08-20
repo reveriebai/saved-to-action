@@ -1,11 +1,11 @@
 ---
 name: saved-to-action
-description: Turn local Markdown, Get笔记, or IMA collections into a private macOS action board with incremental extraction, daily old-save revisit, atomic local JSON updates, and scheduled runs. Use when the user explicitly invokes $saved-to-action to initialize, sync, revisit, validate, build, repair, or schedule a Saved to Action workspace. Do not use implicitly for ordinary note reading, task advice, or note editing.
+description: Turn local Markdown, Get笔记, or IMA collections into a private macOS or experimental Windows action board with incremental extraction, daily old-save revisit, atomic local JSON updates, and scheduled runs. Use when the user explicitly invokes $saved-to-action to initialize, sync, revisit, validate, build, repair, or schedule a Saved to Action workspace. Do not use implicitly for ordinary note reading, task advice, or note editing.
 ---
 
 # Saved to Action
 
-把本地 Markdown、Get笔记或 IMA 收藏增量提炼为行动卡，并在 macOS 桌面卡片和完整看板中管理完成、追踪与焚毁状态。始终只读来源；不创建 Markdown 镜像，只写用户确认的独立工作目录与 App 配置。
+把本地 Markdown、Get笔记或 IMA 收藏增量提炼为行动卡，并在 macOS 或 Windows 桌面卡片和完整看板中管理完成、追踪与焚毁状态。始终只读来源；不创建 Markdown 镜像，只写用户确认的独立工作目录与 App 配置。macOS 为正式支持平台；Windows 版在真实设备完成人工验收前必须标记为实验性。
 
 ## 先判断操作
 
@@ -29,7 +29,7 @@ python3 "$SKILL_DIR/scripts/saved_to_action.py" <command>
 - 不把 Get/IMA 凭证、原始内部 ID、IMA 临时下载链接或正文写入公开仓库；凭证由各自工具管理。
 - 运行任何写操作前，明确展示来源目录、工作目录、首次导入模式和预计数量，并取得确认。
 - 不以 `--force` 覆盖已有工作区。配置或数据损坏时先报告并保留原文件。
-- 只有用户明确同意安装 App 时才使用 `build_app.sh --install`；默认只构建到工作区的 `dist/`。
+- 只有用户明确同意安装 App 时才使用平台对应的安装参数；默认只构建到工作区的 `dist/`。
 - 只有用户明确要求定时运行时才创建或更新定时任务；不要直接编辑自动化配置文件。
 
 ## 初始化
@@ -147,7 +147,11 @@ python3 "$SKILL_DIR/scripts/saved_to_action.py" commit-revisit \
 
 ## 构建 App
 
-先确认 Apple Command Line Tools 可用：`xcrun --show-sdk-path`。默认仅构建：
+先检测操作系统，不要在非目标系统上假装完成原生运行验收。
+
+### macOS
+
+确认 Apple Command Line Tools 可用：`xcrun --show-sdk-path`。默认仅构建：
 
 ```bash
 "$SKILL_DIR/scripts/build_app.sh" --workspace "/absolute/workspace"
@@ -160,6 +164,22 @@ python3 "$SKILL_DIR/scripts/saved_to_action.py" commit-revisit \
 ```
 
 安装模式会复制 App 到 `~/Applications`，并在 `~/Library/Application Support/SavedToAction/app.json` 写入工作区配置指针。不要覆盖或迁移任何同名旧系统；发现已有目标时先停下并让用户选择。
+
+### Windows（实验性）
+
+仅在 Windows 10/11 上构建。先确认 Python 3、PowerShell 7、.NET 8 SDK 和 Microsoft Edge WebView2 Runtime 可用。默认仅构建：
+
+```powershell
+& "$SKILL_DIR\scripts\build_windows_app.ps1" -Workspace "C:\absolute\workspace"
+```
+
+产物位于工作区 `dist\windows\win-x64\` 或 `dist\windows\win-arm64\`。用户明确同意安装后才执行：
+
+```powershell
+& "$SKILL_DIR\scripts\build_windows_app.ps1" -Workspace "C:\absolute\workspace" -Install
+```
+
+安装模式会复制到 `%LOCALAPPDATA%\Programs\SavedToAction\`，并把工作区配置指针写入 `%LOCALAPPDATA%\SavedToAction\app.json`。发现已有安装目录时停止，不覆盖。首版不发布未签名的预编译 `.exe`；本地构建出现 SmartScreen 提示时不要指导用户绕过系统保护。Windows 的托盘、窗口层级、打开原文和重启状态必须在真实 Windows 设备上验证后，才能移除“实验性”标记。
 
 ## 创建定时任务
 

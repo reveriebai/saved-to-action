@@ -6,6 +6,9 @@ dist/
 *.app/
 *.swiftmodule
 *.pcm
+**/bin/
+**/obj/
+*.exe
 saved-to-action.json
 Data/actions.json
 candidates*.json
