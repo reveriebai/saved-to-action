@@ -33,7 +33,7 @@ final class SavedToActionAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func createDesktopPanel() {
-        let size = NSSize(width: 438, height: 500)
+        let size = NSSize(width: 454, height: 514)
         let panel = DesktopActionPanel(
             contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.borderless],
