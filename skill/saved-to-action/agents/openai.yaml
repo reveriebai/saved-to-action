@@ -1,6 +1,6 @@
 interface:
   display_name: "Saved to Action"
-  short_description: "把 Markdown 笔记提炼成可执行的本地行动看板"
-  default_prompt: "Use $saved-to-action to inspect my Markdown folder and set up a private local action board after I confirm the paths."
+  short_description: "把 Markdown、Get笔记和 IMA 收藏变成本地行动看板"
+  default_prompt: "Use $saved-to-action to inspect my selected Markdown, Get笔记, or IMA sources and set up a private local action board after I confirm them."
 policy:
   allow_implicit_invocation: false

@@ -13,7 +13,8 @@ struct WorkspaceConfig: Decodable {
 
 struct SourceConfig: Decodable {
     let name: String
-    let path: String
+    let kind: String?
+    let path: String?
 }
 
 struct ActionFile: Decodable {
@@ -35,6 +36,7 @@ struct StoredAction: Decodable, Identifiable, Hashable {
     let detail: String?
     let savedAt: String
     let sourceType: String
+    let sourceURL: String?
 }
 
 struct StoredRevisit: Decodable, Hashable {
@@ -48,6 +50,7 @@ struct StoredRevisit: Decodable, Hashable {
     let detail: String?
     let savedAt: String
     let selectedAt: String
+    let sourceURL: String?
 }
 
 struct LocalAction: Codable, Equatable, Identifiable {
@@ -60,6 +63,7 @@ struct LocalAction: Codable, Equatable, Identifiable {
     let intent: String
     let detail: String?
     let savedAt: String
+    let sourceURL: String?
 }
 
 struct BoardState: Codable, Equatable {

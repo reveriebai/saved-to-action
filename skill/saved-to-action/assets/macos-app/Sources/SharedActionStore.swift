@@ -75,13 +75,16 @@ enum SharedActionStore {
         else { return (false, "行动数据损坏；原文件没有被 App 修改。", [], nil) }
 
         var sourceRoots: [String: URL] = [:]
+        var sourceNames: Set<String> = []
         for source in config.sources {
-            guard sourceRoots[source.name] == nil else {
+            guard sourceNames.insert(source.name).inserted else {
                 return (false, "工作目录包含重复的来源名称。", [], nil)
             }
-            sourceRoots[source.name] = URL(fileURLWithPath: source.path)
-                .standardizedFileURL
-                .resolvingSymlinksInPath()
+            if (source.kind ?? "markdown") == "markdown", let path = source.path {
+                sourceRoots[source.name] = URL(fileURLWithPath: path)
+                    .standardizedFileURL
+                    .resolvingSymlinksInPath()
+            }
         }
         var items = file.actions.map { action in
             ActionItem(stored: action, sourceURL: resolveSource(action, roots: sourceRoots))
@@ -99,7 +102,8 @@ enum SharedActionStore {
                 task: action.task,
                 detail: action.detail,
                 savedAt: action.savedAt,
-                sourceType: "旧收藏回看"
+                sourceType: "旧收藏回看",
+                sourceURL: action.sourceURL
             )
             return ActionItem(stored: stored, sourceURL: resolveSource(stored, roots: sourceRoots))
         })
@@ -111,6 +115,7 @@ enum SharedActionStore {
     }
 
     private static func resolveSource(_ action: StoredAction, roots: [String: URL]) -> URL? {
+        if let remote = safeRemoteURL(action.sourceURL) { return remote }
         guard let root = roots[action.sourceName] else { return nil }
         let candidate = root.appendingPathComponent(action.relativePath).standardizedFileURL.resolvingSymlinksInPath()
         guard isInside(candidate, root: root), FileManager.default.fileExists(atPath: candidate.path) else {
@@ -120,6 +125,7 @@ enum SharedActionStore {
     }
 
     private static func resolveSource(_ revisit: StoredRevisit, roots: [String: URL]) -> URL? {
+        if let remote = safeRemoteURL(revisit.sourceURL) { return remote }
         guard let root = roots[revisit.sourceName] else { return nil }
         let candidate = root.appendingPathComponent(revisit.relativePath).standardizedFileURL.resolvingSymlinksInPath()
         guard isInside(candidate, root: root), FileManager.default.fileExists(atPath: candidate.path) else {
@@ -132,6 +138,18 @@ enum SharedActionStore {
         let rootPath = root.standardizedFileURL.path
         let candidatePath = candidate.standardizedFileURL.path
         return candidatePath == rootPath || candidatePath.hasPrefix(rootPath + "/")
+    }
+
+    private static func safeRemoteURL(_ value: String?) -> URL? {
+        guard
+            let value,
+            let url = URL(string: value),
+            url.scheme?.lowercased() == "https",
+            url.host != nil,
+            url.user == nil,
+            url.password == nil
+        else { return nil }
+        return url
     }
 
     static func allActions() -> [ActionItem] {
@@ -217,7 +235,8 @@ enum SharedActionStore {
                 task: revisit.stored.task,
                 intent: revisit.stored.summary,
                 detail: revisit.stored.detail,
-                savedAt: revisit.stored.savedAt
+                savedAt: revisit.stored.savedAt,
+                sourceURL: revisit.stored.sourceURL
             )
         )
         state.currentAction = id

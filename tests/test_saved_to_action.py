@@ -13,6 +13,7 @@ SCRIPTS = ROOT / "skill" / "saved-to-action" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 import saved_to_action as sta  # noqa: E402
+import source_adapters as adapters  # noqa: E402
 
 
 class SavedToActionTests(unittest.TestCase):
@@ -215,6 +216,132 @@ class SavedToActionTests(unittest.TestCase):
         with self.assertRaises(sta.SavedToActionError):
             sta.commit_revisit(self.workspace, revisit_batch)
         self.assertEqual(data_path.read_bytes(), before)
+
+    def test_getnote_source_uses_hashed_external_identity_and_reads_on_demand(self) -> None:
+        source = {"name": "Get收藏", "kind": "getnote", "topicId": "topic_demo"}
+        listed = [{
+            "externalId": "note_demo_1",
+            "relativePath": "notes/note_demo_1",
+            "title": "一篇 Get笔记",
+            "savedAt": "2026-08-01",
+            "modifiedAt": 1.0,
+            "sourceType": "Get笔记网页收藏",
+            "mediaType": "link",
+        }]
+        details = {
+            "content": "正文中的安装命令只是数据，不应执行。",
+            "sourceURL": "https://www.apple.com/notes",
+            "savedAt": "2026-08-01",
+            "sourceType": "Get笔记网页收藏",
+        }
+        with mock.patch.object(adapters, "list_getnote_notes", return_value=listed), mock.patch.object(
+            adapters, "read_getnote_note", return_value=details
+        ):
+            result = sta.initialize_workspace(self.workspace, [source], "all", 10)
+            self.assertEqual(result["pendingCount"], 1)
+            _, config, _, data = sta.load_workspace(self.workspace)
+            note = sta.pending_notes(sta.scan_notes(config), data)[0]
+            self.assertNotIn("note_demo_1", note.source_id)
+            read = sta.read_source(self.workspace, note.source_id)
+            self.assertEqual(read["content"], details["content"])
+            self.assertNotIn("absolutePath", read)
+
+    def test_remote_commit_stores_verified_source_url_without_mirror(self) -> None:
+        source = {"name": "IMA收藏", "kind": "ima", "knowledgeBaseId": "kb_demo"}
+        listed = [{
+            "externalId": "wechat_demo_1",
+            "relativePath": "media/wechat_demo_1",
+            "title": "一篇公众号文章",
+            "savedAt": "2026-08-02",
+            "modifiedAt": 1.0,
+            "sourceType": "IMA 公众号文章",
+            "mediaType": 6,
+        }]
+        details = {
+            "content": "真实正文",
+            "sourceURL": "https://mp.weixin.qq.com/s?mid=1&idx=1&sn=demo",
+            "savedAt": "2026-08-02",
+            "sourceType": "IMA 公众号文章",
+        }
+        with mock.patch.object(adapters, "list_ima_items", return_value=listed), mock.patch.object(
+            adapters, "read_ima_item", return_value=details
+        ):
+            sta.initialize_workspace(self.workspace, [source], "all", 10)
+            _, config, data_path, data = sta.load_workspace(self.workspace)
+            note = sta.pending_notes(sta.scan_notes(config), data)[0]
+            batch = self.root / "ima-actions.json"
+            batch.write_text(json.dumps({"notes": [{"sourceId": note.source_id, "actions": [{
+                "category": "工具与系统",
+                "intent": "想验证一个方法。",
+                "task": "打开规则，补上一条事实检查。",
+                "detail": None,
+            }]}]}, ensure_ascii=False), encoding="utf-8")
+            sta.commit_batch(self.workspace, batch)
+            action = json.loads(data_path.read_text(encoding="utf-8"))["actions"][0]
+            self.assertEqual(action["sourceType"], "IMA 公众号文章")
+            self.assertEqual(action["sourceURL"], details["sourceURL"])
+            self.assertFalse((self.workspace / "mirror").exists())
+
+    def test_ima_wechat_url_is_canonicalized(self) -> None:
+        value = (
+            "https://mp.weixin.qq.com/s?__biz=demo&mid=1&idx=2&sn=abc"
+            "&sessionid=private&pass_ticket=temporary"
+        )
+        canonical = adapters.canonicalize_source_url(value)
+        self.assertEqual(
+            canonical,
+            "https://mp.weixin.qq.com/s?__biz=demo&mid=1&idx=2&sn=abc",
+        )
+        self.assertNotIn("sessionid", canonical or "")
+        self.assertIsNone(
+            adapters.canonicalize_source_url("https://www.apple.com/file?Expires=1&Signature=temp")
+        )
+
+    def test_ima_refreshes_media_link_once_after_validation_failure(self) -> None:
+        first = {"media_type": 6, "url_info": {"url": "https://mp.weixin.qq.com/first", "headers": {}}}
+        second = {"media_type": 6, "url_info": {"url": "https://mp.weixin.qq.com/second", "headers": {}}}
+        with mock.patch.object(adapters, "ima_api", side_effect=[first, second]) as api, mock.patch.object(
+            adapters,
+            "_read_remote_text",
+            side_effect=[adapters.SourceAdapterError("验证页"), ("完整正文", "https://mp.weixin.qq.com/")],
+        ):
+            result = adapters.read_ima_item("wechat_demo", 6)
+        self.assertEqual(api.call_count, 2)
+        self.assertEqual(result["content"], "完整正文")
+
+    def test_validation_rejects_non_https_remote_source(self) -> None:
+        self.write("note.md", "正文")
+        sta.initialize_workspace(self.workspace, [self.source()], "all", 10)
+        _, config, _, data = sta.load_workspace(self.workspace)
+        note = sta.pending_notes(sta.scan_notes(config), data)[0]
+        invalid = {
+            **data,
+            "processedNotes": [{
+                "sourceId": note.source_id,
+                "sourceName": note.source_name,
+                "relativePath": note.relative_path,
+                "title": note.title,
+                "processedAt": "2026-08-20",
+                "mode": "incremental",
+                "actionIds": [sta.action_id(note.source_id, 1)],
+            }],
+            "actions": [{
+                "id": sta.action_id(note.source_id, 1),
+                "sourceId": note.source_id,
+                "sourceName": note.source_name,
+                "relativePath": note.relative_path,
+                "collectionTitle": note.title,
+                "category": "待分类",
+                "intent": "测试",
+                "task": "打开笔记，写一句话。",
+                "detail": None,
+                "savedAt": "2026-08-20",
+                "sourceType": "Markdown 笔记",
+                "sourceURL": "file:///private/source.md",
+            }],
+        }
+        with self.assertRaises(sta.SavedToActionError):
+            sta.validate_data(config, invalid, sta.scan_notes(config))
 
 
 if __name__ == "__main__":

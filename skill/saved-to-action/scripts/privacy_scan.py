@@ -14,7 +14,14 @@ BANNED_PATTERNS = [
     re.compile(r"\b191\d{16}\b"),
 ]
 URL_PATTERN = re.compile(r"https?://([^/\s\"'<>]+)")
-ALLOWED_URL_HOSTS = {"www.apple.com"}
+ALLOWED_URL_HOSTS = {
+    "www.apple.com",
+    "github.com",
+    "ima.qq.com",
+    "mp.weixin.qq.com",
+    "biji.com",
+    "www.biji.com",
+}
 SKIP_PARTS = {".git", ".build", "dist", "__pycache__"}
 BINARY_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".pdf", ".app", ".swiftmodule", ".pcm"}
 

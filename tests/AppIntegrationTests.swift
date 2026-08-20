@@ -46,7 +46,10 @@ struct AppIntegrationTests {
         try writeJSON(["version": 1, "workspaceConfigPath": configURL.path], to: pointerURL)
         try writeJSON([
             "version": 1,
-            "sources": [["name": "示例", "path": source.path]],
+            "sources": [
+                ["name": "示例", "kind": "markdown", "path": source.path],
+                ["name": "远程", "kind": "getnote"],
+            ],
             "dataPath": "Data/actions.json",
         ], to: configURL)
         try writeJSON(["version": 1, "updatedAt": "2026-01-01", "actions": []], to: dataURL)
@@ -66,6 +69,15 @@ struct AppIntegrationTests {
             ]
         }
 
+        func remoteAction(_ id: String, _ sourceURL: String) -> [String: Any] {
+            [
+                "id": id, "sourceId": "note:remote", "sourceName": "远程", "relativePath": "notes/demo",
+                "collectionTitle": "远程示例", "category": "待分类", "intent": "想验证远程来源。",
+                "task": "打开原文，写下一句话。", "detail": NSNull(), "savedAt": "2026-01-01",
+                "sourceType": "Get笔记网页收藏", "sourceURL": sourceURL,
+            ]
+        }
+
         try writeJSON(["version": 1, "updatedAt": "2026-01-01", "actions": [action("a1", "../outside.md")]], to: dataURL)
         loaded = SharedActionStore.loadActions()
         require(loaded.configured && loaded.actions.count == 1 && loaded.actions[0].sourceURL == nil, "source traversal must disable open-original")
@@ -73,6 +85,15 @@ struct AppIntegrationTests {
         try writeJSON(["version": 1, "updatedAt": "2026-01-01", "actions": [action("a1", "example.md"), action("a2", "example.md")]], to: dataURL)
         loaded = SharedActionStore.loadActions()
         require(loaded.actions.count == 2 && loaded.actions.allSatisfy { $0.sourceURL != nil }, "incremental refresh should load new actions")
+
+        try writeJSON([
+            "version": 1,
+            "updatedAt": "2026-01-01",
+            "actions": [remoteAction("remote-ok", "https://www.apple.com/notes"), remoteAction("remote-bad", "file:///outside")],
+        ], to: dataURL)
+        loaded = SharedActionStore.loadActions()
+        require(loaded.actions[0].sourceURL?.scheme == "https", "verified HTTPS source should remain openable")
+        require(loaded.actions[1].sourceURL == nil, "non-HTTPS remote source must not be openable")
 
         let revisit: [String: Any] = [
             "sourceId": "note:history", "sourceName": "示例", "relativePath": "example.md",

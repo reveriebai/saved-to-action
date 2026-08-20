@@ -11,9 +11,12 @@ import json
 import os
 import sys
 import tempfile
-from dataclasses import dataclass
+import urllib.parse
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Iterable
+
+import source_adapters as adapters
 
 
 CONFIG_NAME = "saved-to-action.json"
@@ -43,23 +46,29 @@ class Note:
     source_id: str
     identity_kind: str
     source_name: str
-    source_root: Path
+    source_kind: str
+    source_root: Path | None
     relative_path: str
-    absolute_path: Path
+    absolute_path: Path | None
+    external_id: str | None
+    media_type: str | int | None
     title: str
     saved_at: str
     modified_at: float
+    source_type: str
 
     def public_dict(self, include_absolute_path: bool = True) -> dict[str, Any]:
         result = {
             "sourceId": self.source_id,
             "identityKind": self.identity_kind,
             "sourceName": self.source_name,
+            "sourceKind": self.source_kind,
             "relativePath": self.relative_path,
             "title": self.title,
             "savedAt": self.saved_at,
+            "sourceType": self.source_type,
         }
-        if include_absolute_path:
+        if include_absolute_path and self.absolute_path is not None:
             result["absolutePath"] = str(self.absolute_path)
         return result
 
@@ -166,6 +175,13 @@ def source_id_for(
     return f"note:{digest}", "relative-path"
 
 
+def external_source_id(source_name: str, kind: str, external_id: str) -> str:
+    digest = hashlib.sha256(
+        f"external\0{source_name}\0{kind}\0{external_id}".encode("utf-8")
+    ).hexdigest()
+    return f"note:{digest}"
+
+
 def parse_source_argument(value: str) -> dict[str, str]:
     if "=" not in value:
         raise SavedToActionError("来源必须使用 名称=/绝对/路径 格式")
@@ -178,7 +194,41 @@ def parse_source_argument(value: str) -> dict[str, str]:
         raise SavedToActionError(f"来源路径必须是绝对路径：{path}")
     if not path.is_dir():
         raise SavedToActionError(f"来源目录不存在：{path}")
-    return {"name": name, "path": str(path.resolve())}
+    return {"name": name, "kind": "markdown", "path": str(path.resolve())}
+
+
+def parse_getnote_source_argument(value: str) -> dict[str, str]:
+    if "=" not in value:
+        raise SavedToActionError("Get笔记来源必须使用 名称=all 或 名称=知识库ID")
+    name, selector = value.split("=", 1)
+    name = name.strip()
+    selector = selector.strip()
+    if not name or not selector:
+        raise SavedToActionError("Get笔记来源名称和范围不能为空")
+    source = {"name": name, "kind": "getnote"}
+    if selector != "all":
+        source["topicId"] = selector
+    return source
+
+
+def parse_ima_source_argument(value: str) -> dict[str, str]:
+    if "=" not in value:
+        raise SavedToActionError("IMA 来源必须使用 名称=知识库ID")
+    name, knowledge_base_id = value.split("=", 1)
+    name = name.strip()
+    knowledge_base_id = knowledge_base_id.strip()
+    if not name or not knowledge_base_id:
+        raise SavedToActionError("IMA 来源名称和知识库 ID 不能为空")
+    return {"name": name, "kind": "ima", "knowledgeBaseId": knowledge_base_id}
+
+
+def parse_sources_from_args(args: argparse.Namespace) -> list[dict[str, str]]:
+    sources = [parse_source_argument(value) for value in (args.source or [])]
+    sources.extend(parse_getnote_source_argument(value) for value in (args.getnote_source or []))
+    sources.extend(parse_ima_source_argument(value) for value in (args.ima_source or []))
+    if not sources:
+        raise SavedToActionError("至少需要一个 Markdown、Get笔记或 IMA 来源")
+    return sources
 
 
 def scan_notes(config: dict[str, Any]) -> list[Note]:
@@ -195,10 +245,63 @@ def scan_notes(config: dict[str, Any]) -> list[Note]:
 
     for source in sources:
         name = source.get("name")
-        path_value = source.get("path")
         if not isinstance(name, str) or not name or name in seen_names:
             raise SavedToActionError(f"来源名称无效或重复：{name!r}")
         seen_names.add(name)
+        kind = adapters.source_kind(source)
+        if kind == "getnote":
+            try:
+                records = adapters.list_getnote_notes(source)
+            except adapters.SourceAdapterError as exc:
+                raise SavedToActionError(f"Get笔记来源 {name} 读取失败：{exc}") from exc
+            for record in records:
+                external_id = str(record["externalId"])
+                notes.append(
+                    Note(
+                        source_id=external_source_id(name, kind, external_id),
+                        identity_kind="external-id",
+                        source_name=name,
+                        source_kind=kind,
+                        source_root=None,
+                        relative_path=str(record["relativePath"]),
+                        absolute_path=None,
+                        external_id=external_id,
+                        media_type=record.get("mediaType"),
+                        title=str(record["title"]),
+                        saved_at=str(record["savedAt"]),
+                        modified_at=float(record["modifiedAt"]),
+                        source_type=str(record["sourceType"]),
+                    )
+                )
+            continue
+        if kind == "ima":
+            try:
+                records = adapters.list_ima_items(source)
+            except adapters.SourceAdapterError as exc:
+                raise SavedToActionError(f"IMA 来源 {name} 读取失败：{exc}") from exc
+            for record in records:
+                external_id = str(record["externalId"])
+                notes.append(
+                    Note(
+                        source_id=external_source_id(name, kind, external_id),
+                        identity_kind="external-id",
+                        source_name=name,
+                        source_kind=kind,
+                        source_root=None,
+                        relative_path=str(record["relativePath"]),
+                        absolute_path=None,
+                        external_id=external_id,
+                        media_type=record.get("mediaType"),
+                        title=str(record["title"]),
+                        saved_at=str(record["savedAt"]),
+                        modified_at=float(record["modifiedAt"]),
+                        source_type=str(record["sourceType"]),
+                    )
+                )
+            continue
+        if kind != "markdown":
+            raise SavedToActionError(f"来源 {name} 的 kind 不受支持：{kind}")
+        path_value = source.get("path")
         if not isinstance(path_value, str):
             raise SavedToActionError(f"来源 {name} 缺少路径")
         root = Path(path_value).expanduser().resolve()
@@ -235,15 +338,75 @@ def scan_notes(config: dict[str, Any]) -> list[Note]:
                     source_id=source_id,
                     identity_kind=identity_kind,
                     source_name=name,
+                    source_kind=kind,
                     source_root=root,
                     relative_path=relative,
                     absolute_path=resolved,
+                    external_id=None,
+                    media_type=None,
                     title=title,
                     saved_at=saved_at,
                     modified_at=stat.st_mtime,
+                    source_type="Markdown 笔记",
                 )
             )
+    seen_ids: dict[str, str] = {}
+    for note in notes:
+        if note.source_id in seen_ids:
+            raise SavedToActionError(
+                f"笔记身份重复：{seen_ids[note.source_id]} 与 {note.source_name}/{note.relative_path}"
+            )
+        seen_ids[note.source_id] = f"{note.source_name}/{note.relative_path}"
     return sorted(notes, key=lambda note: (note.saved_at, note.modified_at, note.relative_path))
+
+
+def read_note_content(config: dict[str, Any], note: Note) -> dict[str, Any]:
+    if note.source_kind == "markdown":
+        if note.absolute_path is None:
+            raise SavedToActionError("Markdown 来源缺少文件路径")
+        try:
+            content = note.absolute_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            raise SavedToActionError(f"无法读取 Markdown：{note.absolute_path}") from exc
+        return {
+            "content": content,
+            "sourceURL": None,
+            "savedAt": note.saved_at,
+            "sourceType": note.source_type,
+        }
+    if note.external_id is None:
+        raise SavedToActionError("外部来源缺少稳定 ID")
+    try:
+        if note.source_kind == "getnote":
+            return adapters.read_getnote_note(note.external_id)
+        if note.source_kind == "ima":
+            media_type = int(note.media_type or 0)
+            return adapters.read_ima_item(note.external_id, media_type)
+    except adapters.SourceAdapterError as exc:
+        raise SavedToActionError(f"来源原文读取失败：{note.title}: {exc}") from exc
+    raise SavedToActionError(f"不支持读取来源 kind：{note.source_kind}")
+
+
+def read_source(workspace: Path, source_id: str) -> dict[str, Any]:
+    _, config, _, data = load_workspace(workspace)
+    notes = scan_notes(config)
+    note = next((item for item in notes if item.source_id == source_id), None)
+    if note is None:
+        raise SavedToActionError("找不到指定来源，可能已被删除或移出配置范围")
+    processed = {
+        item.get("sourceId")
+        for item in data.get("processedNotes", [])
+        if isinstance(item, dict)
+    }
+    details = read_note_content(config, note)
+    return {
+        **note.public_dict(),
+        "processed": note.source_id in processed,
+        "content": details["content"],
+        "sourceURL": details.get("sourceURL"),
+        "savedAt": details.get("savedAt") or note.saved_at,
+        "sourceType": details.get("sourceType") or note.source_type,
+    }
 
 
 def workspace_paths(workspace: Path) -> tuple[Path, Path]:
@@ -274,6 +437,8 @@ def baseline_record(note: Note) -> dict[str, Any]:
         "sourceName": note.source_name,
         "relativePath": note.relative_path,
         "title": note.title,
+        "savedAt": note.saved_at,
+        "sourceType": note.source_type,
         "processedAt": today_iso(),
         "mode": "baseline",
         "actionIds": [],
@@ -282,7 +447,7 @@ def baseline_record(note: Note) -> dict[str, Any]:
 
 def initialize_workspace(
     workspace: Path,
-    sources: list[dict[str, str]],
+    sources: list[dict[str, Any]],
     mode: str,
     latest: int,
     categories: list[str] | None = None,
@@ -339,6 +504,15 @@ def safe_relative_path(value: Any) -> bool:
     if not isinstance(value, str) or not value or value.startswith("/"):
         return False
     return all(part not in {"", ".", ".."} for part in value.split("/"))
+
+
+def safe_source_url(value: Any) -> bool:
+    if value is None:
+        return True
+    if not isinstance(value, str) or not value:
+        return False
+    parsed = urllib.parse.urlparse(value)
+    return parsed.scheme == "https" and bool(parsed.hostname) and parsed.username is None
 
 
 def pending_notes(notes: list[Note], data: dict[str, Any]) -> list[Note]:
@@ -404,6 +578,8 @@ def validate_data(config: dict[str, Any], data: dict[str, Any], notes: list[Note
         detail = action.get("detail")
         if detail is not None and not isinstance(detail, str):
             raise SavedToActionError("detail 必须是字符串或 null")
+        if not safe_source_url(action.get("sourceURL")):
+            raise SavedToActionError("sourceURL 必须是安全的 HTTPS 地址或 null")
         action_by_source.setdefault(action["sourceId"], set()).add(action["id"])
         action_records_by_source.setdefault(action["sourceId"], []).append(action)
     processed_by_source: dict[str, dict[str, Any]] = {}
@@ -471,6 +647,8 @@ def validate_data(config: dict[str, Any], data: dict[str, Any], notes: list[Note
         detail = revisit.get("detail")
         if detail is not None and not isinstance(detail, str):
             raise SavedToActionError("dailyRevisit.detail 必须是字符串或 null")
+        if not safe_source_url(revisit.get("sourceURL")):
+            raise SavedToActionError("dailyRevisit.sourceURL 必须是安全的 HTTPS 地址或 null")
         record = processed_by_source.get(revisit["sourceId"])
         if (
             record is None
@@ -526,6 +704,11 @@ def commit_batch(workspace: Path, batch_path: Path) -> dict[str, Any]:
         if not isinstance(candidates, list) or not 1 <= len(candidates) <= 2:
             raise SavedToActionError("每篇候选笔记必须包含 1–2 个行动")
         ids: list[str] = []
+        source_details = read_note_content(config, note) if note.source_kind != "markdown" else {
+            "sourceURL": None,
+            "savedAt": note.saved_at,
+            "sourceType": note.source_type,
+        }
         for index, candidate in enumerate(candidates, start=1):
             if not isinstance(candidate, dict):
                 raise SavedToActionError("候选行动必须是对象")
@@ -554,8 +737,9 @@ def commit_batch(workspace: Path, batch_path: Path) -> dict[str, Any]:
                     "intent": intent.strip(),
                     "task": task.strip(),
                     "detail": detail.strip() if isinstance(detail, str) and detail.strip() else None,
-                    "savedAt": note.saved_at,
-                    "sourceType": "Markdown 笔记",
+                    "savedAt": source_details.get("savedAt") or note.saved_at,
+                    "sourceType": source_details.get("sourceType") or note.source_type,
+                    "sourceURL": source_details.get("sourceURL"),
                 }
             )
         new_processed.append(
@@ -564,6 +748,8 @@ def commit_batch(workspace: Path, batch_path: Path) -> dict[str, Any]:
                 "sourceName": note.source_name,
                 "relativePath": note.relative_path,
                 "title": note.title,
+                "savedAt": source_details.get("savedAt") or note.saved_at,
+                "sourceType": source_details.get("sourceType") or note.source_type,
                 "processedAt": today_iso(),
                 "mode": "incremental",
                 "actionIds": ids,
@@ -593,6 +779,9 @@ def eligible_revisit_notes(config: dict[str, Any], data: dict[str, Any], notes: 
             continue
         note = note_by_id.get(item.get("sourceId"))
         if note is not None:
+            stored_saved_at = item.get("savedAt")
+            if isinstance(stored_saved_at, str) and stored_saved_at:
+                note = replace(note, saved_at=stored_saved_at)
             eligible.append(note)
     history = set(data.get("revisitHistory", []))
     current_id = (data.get("dailyRevisit") or {}).get("sourceId")
@@ -646,6 +835,10 @@ def commit_revisit(workspace: Path, batch_path: Path) -> dict[str, Any]:
     detail = batch.get("detail")
     if detail is not None and not isinstance(detail, str):
         raise SavedToActionError("回看候选 detail 必须是字符串或 null")
+    source_details = read_note_content(config, note) if note.source_kind != "markdown" else {
+        "sourceURL": None,
+        "savedAt": note.saved_at,
+    }
     revisit = {
         "sourceId": note.source_id,
         "sourceName": note.source_name,
@@ -655,7 +848,8 @@ def commit_revisit(workspace: Path, batch_path: Path) -> dict[str, Any]:
         "usage": values["usage"],
         "task": values["task"],
         "detail": detail.strip() if isinstance(detail, str) and detail.strip() else None,
-        "savedAt": note.saved_at,
+        "savedAt": source_details.get("savedAt") or note.saved_at,
+        "sourceURL": source_details.get("sourceURL"),
         "selectedAt": today_iso(),
     }
     history = list(data.get("revisitHistory", []))
@@ -687,7 +881,7 @@ def configure_app(workspace: Path, output: Path | None = None) -> dict[str, Any]
     return {"appConfigPath": str(target), "workspace": str(workspace)}
 
 
-def inspect_sources(sources: list[dict[str, str]], limit: int) -> dict[str, Any]:
+def inspect_sources(sources: list[dict[str, Any]], limit: int) -> dict[str, Any]:
     config = {
         "sources": sources,
         "recursive": True,
@@ -702,6 +896,7 @@ def inspect_sources(sources: list[dict[str, str]], limit: int) -> dict[str, Any]
         "identitySummary": {
             "frontmatter": sum(note.identity_kind.startswith("frontmatter:") for note in notes),
             "relativePath": sum(note.identity_kind == "relative-path" for note in notes),
+            "externalId": sum(note.identity_kind == "external-id" for note in notes),
         },
         "examples": [note.public_dict() for note in notes[-max(0, limit) :]],
     }
@@ -711,13 +906,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Saved to Action workspace tool")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    inspect_parser = subparsers.add_parser("inspect", help="只读检查 Markdown 来源")
-    inspect_parser.add_argument("--source", action="append", required=True, metavar="NAME=PATH")
+    inspect_parser = subparsers.add_parser("inspect", help="只读检查 Markdown、Get笔记或 IMA 来源")
+    inspect_parser.add_argument("--source", action="append", metavar="NAME=PATH")
+    inspect_parser.add_argument("--getnote-source", action="append", metavar="NAME=all|TOPIC_ID")
+    inspect_parser.add_argument("--ima-source", action="append", metavar="NAME=KNOWLEDGE_BASE_ID")
     inspect_parser.add_argument("--limit", type=int, default=5)
 
     init_parser = subparsers.add_parser("init", help="初始化工作目录")
     init_parser.add_argument("--workspace", required=True)
-    init_parser.add_argument("--source", action="append", required=True, metavar="NAME=PATH")
+    init_parser.add_argument("--source", action="append", metavar="NAME=PATH")
+    init_parser.add_argument("--getnote-source", action="append", metavar="NAME=all|TOPIC_ID")
+    init_parser.add_argument("--ima-source", action="append", metavar="NAME=KNOWLEDGE_BASE_ID")
     init_parser.add_argument("--mode", choices=["future", "latest", "all"], required=True)
     init_parser.add_argument("--latest", type=int, default=10)
     init_parser.add_argument("--category", action="append", help="自定义分类；可重复传入")
@@ -725,6 +924,13 @@ def build_parser() -> argparse.ArgumentParser:
     discover_parser = subparsers.add_parser("discover", help="列出尚未处理的笔记")
     discover_parser.add_argument("--workspace", required=True)
     discover_parser.add_argument("--limit", type=int, default=0)
+
+    read_parser = subparsers.add_parser("read-source", help="按 sourceId 只读获取一篇来源正文")
+    read_parser.add_argument("--workspace", required=True)
+    read_parser.add_argument("--source-id", required=True)
+
+    subparsers.add_parser("list-getnote-knowledge-bases", help="只读列出 Get笔记知识库")
+    subparsers.add_parser("list-ima-knowledge-bases", help="只读列出 IMA 知识库")
 
     commit_parser = subparsers.add_parser("commit", help="验证并原子提交候选行动")
     commit_parser.add_argument("--workspace", required=True)
@@ -752,11 +958,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "inspect":
-            result = inspect_sources([parse_source_argument(value) for value in args.source], args.limit)
+            result = inspect_sources(parse_sources_from_args(args), args.limit)
         elif args.command == "init":
             result = initialize_workspace(
                 Path(args.workspace),
-                [parse_source_argument(value) for value in args.source],
+                parse_sources_from_args(args),
                 args.mode,
                 args.latest,
                 args.category,
@@ -767,6 +973,12 @@ def main(argv: list[str] | None = None) -> int:
             if args.limit > 0:
                 pending = pending[: args.limit]
             result = {"pendingCount": len(pending), "notes": [note.public_dict() for note in pending]}
+        elif args.command == "read-source":
+            result = read_source(Path(args.workspace), args.source_id)
+        elif args.command == "list-getnote-knowledge-bases":
+            result = {"knowledgeBases": adapters.list_getnote_knowledge_bases()}
+        elif args.command == "list-ima-knowledge-bases":
+            result = {"knowledgeBases": adapters.list_ima_knowledge_bases()}
         elif args.command == "commit":
             result = commit_batch(Path(args.workspace), Path(args.input))
         elif args.command == "revisit-candidates":
@@ -790,7 +1002,7 @@ def main(argv: list[str] | None = None) -> int:
             raise SavedToActionError(f"不支持的命令：{args.command}")
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
-    except SavedToActionError as exc:
+    except (SavedToActionError, adapters.SourceAdapterError) as exc:
         print(json.dumps({"error": str(exc)}, ensure_ascii=False, indent=2), file=sys.stderr)
         return 2
 
